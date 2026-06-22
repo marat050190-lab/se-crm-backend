@@ -2,6 +2,8 @@ const express = require('express');
 const router = express.Router();
 const xml2js = require('xml2js');
 const { createLeadFromCall } = require('../services/beeline');
+const { notifyNewCall } = require('../services/telegram');
+const { getPhoneRegion } = require('../utils/phoneRegion');
 
 router.use(express.text({ type: 'application/xml' }));
 router.use(express.text({ type: 'text/xml' }));
@@ -13,17 +15,13 @@ router.post('/webhook', async (req, res) => {
   }
   try {
     const rawBody = req.body || '';
-    console.log('Raw:', rawBody.substring(0, 500));
-    if (!rawBody || !rawBody.includes('<')) {
-      return res.status(200).send('OK');
-    }
+    if (!rawBody || !rawBody.includes('<')) return res.status(200).send('OK');
+
     const parsed = await xml2js.parseStringPromise(rawBody, { explicitArray: false });
     const str = JSON.stringify(parsed);
-    console.log('Parsed:', str.substring(0, 1000));
 
     const remoteMatch = str.match(/"tel:\+7(\d+)"/);
     const callerPhone = remoteMatch ? '7' + remoteMatch[1] : null;
-    console.log('Caller:', callerPhone);
 
     if (callerPhone) {
       const lead = await createLeadFromCall({
@@ -36,17 +34,21 @@ router.post('/webhook', async (req, res) => {
         recordUrl: null,
         startedAt: new Date(),
       });
-      console.log('Lead created:', lead ? lead.id : 'none');
 
-      // Уведомляем всех подключённых клиентов через Socket.io
       const io = req.app.get('io');
       if (io) {
         io.emit('incoming_call', {
           phone: callerPhone,
           leadId: lead ? lead.id : null,
+          leadNumber: lead ? lead.lead_number : null,
           timestamp: new Date().toISOString(),
         });
-        console.log('Socket event emitted: incoming_call', callerPhone);
+      }
+
+      // Telegram уведомление
+      if (lead) {
+        const region = getPhoneRegion(callerPhone);
+        await notifyNewCall(callerPhone, lead.id, lead.lead_number, region);
       }
     }
 
