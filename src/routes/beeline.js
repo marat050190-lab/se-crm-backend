@@ -11,23 +11,18 @@ router.post('/webhook', async (req, res) => {
   if (token !== process.env.BEELINE_WEBHOOK_SECRET) {
     return res.status(403).send('Forbidden');
   }
-
   try {
     const rawBody = req.body || '';
     console.log('Raw:', rawBody.substring(0, 500));
-
     if (!rawBody || !rawBody.includes('<')) {
       return res.status(200).send('OK');
     }
-
     const parsed = await xml2js.parseStringPromise(rawBody, { explicitArray: false });
     const str = JSON.stringify(parsed);
     console.log('Parsed:', str.substring(0, 1000));
 
-    // Ищем номер звонящего
     const remoteMatch = str.match(/"tel:\+7(\d+)"/);
     const callerPhone = remoteMatch ? '7' + remoteMatch[1] : null;
-
     console.log('Caller:', callerPhone);
 
     if (callerPhone) {
@@ -42,6 +37,17 @@ router.post('/webhook', async (req, res) => {
         startedAt: new Date(),
       });
       console.log('Lead created:', lead ? lead.id : 'none');
+
+      // Уведомляем всех подключённых клиентов через Socket.io
+      const io = req.app.get('io');
+      if (io) {
+        io.emit('incoming_call', {
+          phone: callerPhone,
+          leadId: lead ? lead.id : null,
+          timestamp: new Date().toISOString(),
+        });
+        console.log('Socket event emitted: incoming_call', callerPhone);
+      }
     }
 
     res.status(200).send('OK');
