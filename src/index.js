@@ -6,6 +6,7 @@ const { Server } = require('socket.io');
 const cron = require('node-cron');
 const pool = require('./db/pool');
 const { fetchRecentCalls } = require('./services/beeline');
+const { fetchEmails } = require('./services/email');
 
 const app = express();
 const server = http.createServer(app);
@@ -15,38 +16,34 @@ const io = new Server(server, {
 
 const PORT = process.env.PORT || 3001;
 
-// Экспортируем io для использования в routes
 app.set('io', io);
 
-// Middleware
 app.use(cors({ origin: process.env.FRONTEND_URL || '*' }));
 app.use(express.json());
 
-// Routes
 app.use('/api/auth', require('./routes/auth'));
 app.use('/api/leads', require('./routes/leads'));
 app.use('/api/tasks', require('./routes/tasks'));
 app.use('/api/users', require('./routes/users'));
 app.use('/api/beeline', require('./routes/beeline'));
-app.use('/api/migrate', require('./routes/migrate'));
 app.use('/api/stats', require('./routes/stats'));
+app.use('/api/migrate', require('./routes/migrate'));
 
-// Health check
 app.get('/health', (req, res) => res.json({ status: 'ok', ts: new Date() }));
 
-// Socket.io
 io.on('connection', (socket) => {
   console.log('Socket подключён:', socket.id);
-  socket.on('disconnect', () => {
-    console.log('Socket отключён:', socket.id);
-  });
+  socket.on('disconnect', () => console.log('Socket отключён:', socket.id));
 });
 
-// Polling Билайн каждые 5 минут
+// Билайн — каждые 5 минут
 cron.schedule('*/5 * * * *', () => {
-  if (process.env.BEELINE_API_TOKEN) {
-    fetchRecentCalls();
-  }
+  if (process.env.BEELINE_API_TOKEN) fetchRecentCalls();
+});
+
+// Email — каждые 2 минуты
+cron.schedule('*/2 * * * *', () => {
+  fetchEmails(io);
 });
 
 async function start() {
@@ -60,9 +57,11 @@ async function start() {
     await pool.query(schema);
     console.log('✓ Схема БД применена');
 
+    // Первый запрос email при старте
+    setTimeout(() => fetchEmails(io), 5000);
+
     server.listen(PORT, () => {
       console.log(`✓ SE CRM Backend запущен на порту ${PORT}`);
-      console.log(`  Webhook URL: POST /api/beeline/webhook?token=YOUR_SECRET`);
     });
   } catch (err) {
     console.error('Ошибка запуска:', err);
