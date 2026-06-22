@@ -136,6 +136,7 @@ RETURNS TRIGGER AS $$
 BEGIN NEW.updated_at = NOW(); RETURN NEW; END;
 $$ LANGUAGE plpgsql;
 
+DROP TRIGGER IF EXISTS leads_updated_at ON leads;
 CREATE TRIGGER leads_updated_at
   BEFORE UPDATE ON leads
   FOR EACH ROW EXECUTE FUNCTION update_updated_at();
