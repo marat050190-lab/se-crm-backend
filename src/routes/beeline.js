@@ -3,59 +3,51 @@ const router = express.Router();
 const xml2js = require('xml2js');
 const { createLeadFromCall } = require('../services/beeline');
 
+router.use(express.text({ type: 'application/xml' }));
+router.use(express.text({ type: 'text/xml' }));
+
 router.post('/webhook', async (req, res) => {
   const token = req.query.token;
   if (token !== process.env.BEELINE_WEBHOOK_SECRET) {
-    return res.status(403).json({ error: 'Forbidden' });
+    return res.status(403).send('Forbidden');
   }
 
   try {
-    let rawBody = '';
-    req.on('data', chunk => { rawBody += chunk.toString(); });
-    req.on('end', async () => {
-      console.log('Raw body:', rawBody);
-      
-      let callerPhone = null;
-      let direction = null;
-      let callId = null;
+    const rawBody = req.body || '';
+    console.log('Raw:', rawBody.substring(0, 500));
 
-      if (rawBody && rawBody.includes('<?xml')) {
-        const parsed = await xml2js.parseStringPromise(rawBody, { explicitArray: false });
-        console.log('Parsed XML:', JSON.stringify(parsed));
-        
-        const xsiEvent = parsed['xsi:EventPackage'] || parsed['EventPackage'] || parsed;
-        const event = xsiEvent['xsi:Event'] || xsiEvent['Event'] || xsiEvent;
-        const call = event && (event['xsi:call'] || event['call'] || event);
-        
-        if (call) {
-          callerPhone = call['xsi:remoteParty'] || call['remoteParty'] || call['xsi:callerAddress'] || call['callerAddress'];
-          direction = call['xsi:direction'] || call['direction'] || 'INBOUND';
-          callId = call['xsi:callId'] || call['callId'] || Date.now().toString();
-          if (callerPhone && callerPhone.includes('@')) callerPhone = callerPhone.split('@')[0];
-          if (callerPhone && callerPhone.startsWith('tel:+7')) callerPhone = '7' + callerPhone.slice(6);
-          if (callerPhone && callerPhone.startsWith('tel:')) callerPhone = callerPhone.slice(4);
-        }
-      }
+    if (!rawBody || !rawBody.includes('<')) {
+      return res.status(200).send('OK');
+    }
 
-      if (callerPhone && direction === 'INBOUND') {
-        const lead = await createLeadFromCall({
-          callId: callId || Date.now().toString(),
-          callerPhone,
-          calledPhone: null,
-          extension: null,
-          duration: 0,
-          status: 'answered',
-          recordUrl: null,
-          startedAt: new Date(),
-        });
-        console.log('Lead created:', lead);
-      }
+    const parsed = await xml2js.parseStringPromise(rawBody, { explicitArray: false });
+    const str = JSON.stringify(parsed);
+    console.log('Parsed:', str.substring(0, 1000));
 
-      res.status(200).send('OK');
-    });
+    // Ищем номер звонящего
+    const remoteMatch = str.match(/"tel:\+7(\d+)"/);
+    const callerPhone = remoteMatch ? '7' + remoteMatch[1] : null;
+
+    console.log('Caller:', callerPhone);
+
+    if (callerPhone) {
+      const lead = await createLeadFromCall({
+        callId: Date.now().toString(),
+        callerPhone,
+        calledPhone: '9061209313',
+        extension: null,
+        duration: 0,
+        status: 'answered',
+        recordUrl: null,
+        startedAt: new Date(),
+      });
+      console.log('Lead created:', lead ? lead.id : 'none');
+    }
+
+    res.status(200).send('OK');
   } catch (err) {
-    console.error('Webhook error:', err);
-    res.status(500).send('Error');
+    console.error('Webhook error:', err.message);
+    res.status(200).send('OK');
   }
 });
 
