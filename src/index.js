@@ -53,4 +53,6 @@ async function start() {
   }
 }
 
+const { registerXsiSubscription } = require("./services/beelineSubscription");
 start();
+setTimeout(registerXsiSubscription, 3000);
