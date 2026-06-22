@@ -1,30 +1,29 @@
 const express = require('express');
-const router = express.Router();
-const { createLeadFromCall } = require('../services/beeline');
+const { handleWebhook } = require('../services/beeline');
 
+const router = express.Router();
+
+// POST /api/beeline/webhook — приём событий от Билайн
+// Этот endpoint открытый (без JWT), защищён токеном в URL
 router.post('/webhook', async (req, res) => {
   const token = req.query.token;
+
   if (token !== process.env.BEELINE_WEBHOOK_SECRET) {
     return res.status(403).json({ error: 'Forbidden' });
   }
 
   try {
-    // Логируем всё что приходит для отладки
-    console.log('Beeline webhook body:', JSON.stringify(req.body));
-    console.log('Beeline webhook headers:', JSON.stringify(req.headers));
+    const result = await handleWebhook(req.body);
+    res.json({ ok: true, lead: result });
+  } catch (err) {
+    console.error('Webhook error:', err);
+    res.status(500).json({ error: 'Webhook processing error' });
+  }
+});
 
-    const body = req.body;
+// GET /api/beeline/webhook — проверка (Билайн иногда делает GET при настройке)
+router.get('/webhook', (req, res) => {
+  res.json({ status: 'SE CRM Beeline webhook active' });
+});
 
-    // Xsi-Events формат
-    let callerPhone = null;
-    let calledPhone = null;
-    let callId = null;
-    let eventType = null;
-    let direction = null;
-
-    // Билайн может слать как JSON так и XML-parsed объект
-    if (body.xsiEvent || body['xsi:Event']) {
-      const event = body.xsiEvent || body['xsi:Event'];
-      eventType = event.eventType || event['xsi:eventType'];
-      const call = event.call || event['xsi:call'] || {};
-
+module.exports = router;
