@@ -28,6 +28,7 @@ app.use('/api/leads', require('./routes/leads'));
 app.use('/api/tasks', require('./routes/tasks'));
 app.use('/api/users', require('./routes/users'));
 app.use('/api/beeline', require('./routes/beeline'));
+app.use('/api/migrate', require('./routes/migrate'));
 app.use('/api/stats', require('./routes/stats'));
 
 // Health check
