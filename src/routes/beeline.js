@@ -1,19 +1,16 @@
 const express = require('express');
 const router = express.Router();
-const { createLeadFromCall } = require('../services/beeline');
 
 router.post('/webhook', async (req, res) => {
   const token = req.query.token;
   if (token !== process.env.BEELINE_WEBHOOK_SECRET) {
     return res.status(403).json({ error: 'Forbidden' });
   }
-  try {
-    console.log('Beeline webhook body:', JSON.stringify(req.body));
-    res.json({ ok: true });
-  } catch (err) {
-    console.error('Webhook error:', err);
-    res.status(500).json({ error: 'Webhook processing error' });
-  }
+  console.log('=== BEELINE WEBHOOK ===');
+  console.log('Headers:', JSON.stringify(req.headers));
+  console.log('Query:', JSON.stringify(req.query));
+  console.log('Body:', JSON.stringify(req.body));
+  res.status(200).send('OK');
 });
 
 router.get('/webhook', (req, res) => {
