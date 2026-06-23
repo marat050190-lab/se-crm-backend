@@ -25,3 +25,6 @@ INSERT INTO users (name, email, password_hash, role) VALUES
   ('МФЛ Менеджер 1', 'mfl1@se.ru', '$2a$10$rQnGbxBQH8bxZzPmqhDXxeZBEVHnN5LSXCnHPr8ydJKkJEDZH1Tmi', 'mfl_manager'),
   ('КС Менеджер 1', 'cs1@se.ru', '$2a$10$rQnGbxBQH8bxZzPmqhDXxeZBEVHnN5LSXCnHPr8ydJKkJEDZH1Tmi', 'cs_manager')
 ON CONFLICT (email) DO NOTHING;
+
+-- Добавляем telegram_id для уведомлений
+ALTER TABLE users ADD COLUMN IF NOT EXISTS telegram_id VARCHAR(50);
