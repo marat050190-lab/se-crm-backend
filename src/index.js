@@ -29,6 +29,8 @@ app.use('/api/beeline', require('./routes/beeline'));
 app.use('/api/stats', require('./routes/stats'));
 app.use('/api/website', require('./routes/website'));
 app.use('/api/migrate', require('./routes/migrate'));
+app.use('/api/clients', require('./routes/clients'));
+app.use('/api/orders', require('./routes/orders'));
 
 app.get('/health', (req, res) => res.json({ status: 'ok', ts: new Date() }));
 
