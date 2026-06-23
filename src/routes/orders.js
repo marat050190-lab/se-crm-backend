@@ -47,12 +47,17 @@ router.get('/', authMiddleware, async (req, res) => {
   try {
     const { role, id } = req.user;
     const { status } = req.query;
-    const seeAll = ['super_admin', 'admin', 'rop', 'cs_head'].includes(role);
-    const isFinance = ['super_admin', 'admin', 'cs_head'].includes(role);
+    const seeAll = ['super_admin', 'admin', 'cs_head'].includes(role);
     let where = [];
     let params = [];
     let i = 1;
-    if (!seeAll && !isFinance) { where.push(`o.manager_id=$${i++}`); params.push(id); }
+    if (role === 'rop') {
+      // РОП видит заявки своих менеджеров (rop_id = его id) + свои
+      where.push(`(o.manager_id=$${i} OR o.manager_id IN (SELECT id FROM users WHERE rop_id=$${i}))`);
+      params.push(id); i++;
+    } else if (!seeAll) {
+      where.push(`o.manager_id=$${i++}`); params.push(id);
+    }
     if (status) { where.push(`o.status=$${i++}`); params.push(status); }
     const wsql = where.length ? 'WHERE ' + where.join(' AND ') : '';
     const { rows } = await pool.query(

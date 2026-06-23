@@ -7,11 +7,20 @@ const { authMiddleware } = require('../middleware/auth');
 router.get('/', authMiddleware, async (req, res) => {
   try {
     const { role, id } = req.user;
-    const seeAll = ['super_admin', 'admin', 'rop', 'cs_head'].includes(role);
-    const sql = seeAll
-      ? `SELECT c.*, u.name AS manager_name FROM clients c LEFT JOIN users u ON u.id=c.manager_id ORDER BY c.created_at DESC`
-      : `SELECT c.*, u.name AS manager_name FROM clients c LEFT JOIN users u ON u.id=c.manager_id WHERE c.manager_id=$1 ORDER BY c.created_at DESC`;
-    const params = seeAll ? [] : [id];
+    const seeAll = ['super_admin', 'admin', 'cs_head'].includes(role);
+    let sql, params;
+    if (seeAll) {
+      sql = `SELECT c.*, u.name AS manager_name FROM clients c LEFT JOIN users u ON u.id=c.manager_id ORDER BY c.created_at DESC`;
+      params = [];
+    } else if (role === 'rop') {
+      sql = `SELECT c.*, u.name AS manager_name FROM clients c LEFT JOIN users u ON u.id=c.manager_id
+             WHERE c.manager_id=$1 OR c.manager_id IN (SELECT id FROM users WHERE rop_id=$1)
+             ORDER BY c.created_at DESC`;
+      params = [id];
+    } else {
+      sql = `SELECT c.*, u.name AS manager_name FROM clients c LEFT JOIN users u ON u.id=c.manager_id WHERE c.manager_id=$1 ORDER BY c.created_at DESC`;
+      params = [id];
+    }
     const { rows } = await pool.query(sql, params);
     res.json(rows);
   } catch (e) { res.status(500).json({ error: e.message }); }

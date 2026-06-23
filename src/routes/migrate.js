@@ -28,6 +28,18 @@ router.post('/run-ks', async (req, res) => {
   }
 });
 
+router.post('/run-rop', async (req, res) => {
+  const secret = req.query.secret;
+  if (secret !== 'se-migrate-2024') return res.status(403).json({ error: 'Forbidden' });
+  try {
+    const sql = fs.readFileSync(path.join(__dirname, '../db/migrate_rop.sql'), 'utf8');
+    await pool.query(sql);
+    res.json({ ok: true, message: 'ROP migration applied' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;
 
 const bcrypt = require('bcryptjs');
