@@ -45,6 +45,17 @@ router.post('/run-pricing', async (req, res) => {
   if (secret !== 'se-migrate-2024') return res.status(403).json({ error: 'Forbidden' });
   try {
     const sql = fs.readFileSync(path.join(__dirname, '../db/migrate_pricing.sql'), 'utf8');
+
+router.post('/scripts', async (req, res) => {
+  if (req.query.secret !== 'se-migrate-2024') return res.status(403).json({ error: 'Forbidden' });
+  try {
+    const sql = fs.readFileSync(path.join(__dirname, '../db/migrate_scripts.sql'), 'utf8');
+    await req.db.query(sql);
+    res.json({ ok: true, message: 'scripts migration done' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
     await pool.query(sql);
     const cnt = await pool.query('SELECT COUNT(*) FROM pricing_movers');
     res.json({ ok: true, message: 'Pricing migration applied', cities: cnt.rows[0].count });

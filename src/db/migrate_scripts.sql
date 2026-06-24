@@ -1,0 +1,10 @@
+CREATE TABLE IF NOT EXISTS scripts (
+  id SERIAL PRIMARY KEY,
+  category VARCHAR(50) NOT NULL,
+  title VARCHAR(200) NOT NULL,
+  content JSONB NOT NULL DEFAULT '[]',
+  sort_order INT DEFAULT 0,
+  is_active BOOLEAN DEFAULT true,
+  created_at TIMESTAMP DEFAULT NOW(),
+  updated_at TIMESTAMP DEFAULT NOW()
+);
