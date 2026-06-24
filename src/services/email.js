@@ -34,7 +34,7 @@ async function fetchEmails(io) {
       const since = new Date();
       since.setDate(since.getDate() - 7);
       const searchCriteria = ['UNSEEN', ['SINCE', since]];
-      const fetchOptions = { bodies: ['HEADER', 'TEXT', ''], markSeen: true };
+      const fetchOptions = { bodies: ['HEADER', 'TEXT', ''], markSeen: false };
 
       const messages = await connection.search(searchCriteria, fetchOptions);
       console.log(`[EMAIL] ${mailbox.user}: найдено ${messages.length} новых писем`);
