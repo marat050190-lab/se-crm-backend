@@ -56,6 +56,21 @@ async function fetchEmails(io) {
           );
           if (exists.rows.length > 0) continue;
 
+          // Проверка дублей по email за 14 дней
+          const dupCheck = await pool.query(
+            `SELECT id, lead_number FROM leads WHERE client_phone = $1 AND source = 'email' AND created_at > NOW() - INTERVAL '14 days' ORDER BY id DESC LIMIT 1`,
+            [fromEmail]
+          );
+          if (dupCheck.rows.length > 0) {
+            const existingLead = dupCheck.rows[0];
+            await pool.query(
+              `INSERT INTO lead_history (lead_id, user_id, action, comment) VALUES ($1, NULL, 'note', $2)`,
+              [existingLead.id, 'Новое письмо в переписке: ' + subject + '\n\n' + text.slice(0, 500)]
+            );
+            console.log('[EMAIL] Дубль от ' + fromEmail + ' → добавлено в историю лида ' + existingLead.lead_number);
+            continue;
+          }
+
           const numRes = await pool.query("SELECT lead_number FROM leads ORDER BY id DESC LIMIT 1");
           let leadNumber = 'SE-0001';
           if (numRes.rows.length) {
