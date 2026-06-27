@@ -33,6 +33,8 @@ app.use('/api/clients', require('./routes/clients'));
 app.use('/api/orders', require('./routes/orders'));
 app.use('/api/pricing', require('./routes/pricing'));
 app.use('/api/scripts', require('./routes/scripts'));
+app.use('/api/contractors', require('./routes/contractors'));
+app.use('/api/payouts', require('./routes/payouts'));
 
 app.get('/health', (req, res) => res.json({ status: 'ok', ts: new Date() }));
 
