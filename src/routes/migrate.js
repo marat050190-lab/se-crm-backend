@@ -76,6 +76,17 @@ router.post('/payouts', async (req, res) => {
   }
 });
 
+
+router.get('/check-table/:table', async (req, res) => {
+  if (req.query.secret !== 'se-migrate-2024') return res.status(403).json({ error: 'Forbidden' });
+  try {
+    const result = await pool.query(`SELECT column_name FROM information_schema.columns WHERE table_name=$1`, [req.params.table]);
+    res.json(result.rows.map(r => r.column_name));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;
 
 const bcrypt = require('bcryptjs');
