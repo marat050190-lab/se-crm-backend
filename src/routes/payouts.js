@@ -7,7 +7,7 @@ router.get('/', async (req, res) => {
   try {
     const result = await pool.query(`
       SELECT p.*, 
-        c.full_name as contractor_name,
+        c.name as contractor_name,
         c.contractor_type,
         o.id as order_num,
         u.name as created_by_name
