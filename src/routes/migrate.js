@@ -64,6 +64,18 @@ router.post('/scripts', async (req, res) => {
   }
 });
 
+
+router.post('/payouts', async (req, res) => {
+  if (req.query.secret !== 'se-migrate-2024') return res.status(403).json({ error: 'Forbidden' });
+  try {
+    const sql = fs.readFileSync(path.join(__dirname, '../db/migrate_payouts.sql'), 'utf8');
+    await pool.query(sql);
+    res.json({ ok: true, message: 'Payouts migration done' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;
 
 const bcrypt = require('bcryptjs');
