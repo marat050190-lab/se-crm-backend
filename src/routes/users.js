@@ -6,6 +6,7 @@ const router = express.Router();
 router.use(authMiddleware);
 
 const ADMIN_ROLES = ['super_admin', 'admin', 'rop', 'cs_head'];
+const ALL_ROLES = ['super_admin','admin','rop','dispatcher','b2b_manager','mfl_manager','cs_head','cs_manager','accountant','accountant_cashier','debt_specialist'];
 
 router.get('/', async (req, res) => {
   try {
