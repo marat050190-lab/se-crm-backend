@@ -38,6 +38,7 @@ router.get('/', async (req, res) => {
     // Диспетчер видит звонки и заявки с сайта (не email)
     conditions.push(`l.source != 'email'`);
   } else if (role === 'b2b_manager') {
+    conditions.push(`l.created_at > NOW() - INTERVAL '30 days'`);
     // B2B видит email + переданные юрлица ему лично
     conditions.push(`(l.source = 'email' OR (l.client_type = 'legal' AND l.assigned_to = $${i++}))`);
     params.push(req.user.id);
