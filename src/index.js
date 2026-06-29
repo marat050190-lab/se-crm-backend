@@ -18,7 +18,7 @@ const PORT = process.env.PORT || 3001;
 
 app.set('io', io);
 
-app.use(cors({ origin: process.env.FRONTEND_URL || '*' }));
+app.use(cors({ origin: '*', credentials: false }));
 app.use(express.json());
 
 app.use('/api/auth', require('./routes/auth'));
