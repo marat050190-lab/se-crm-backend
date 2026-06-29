@@ -36,6 +36,22 @@ app.use('/api/scripts', require('./routes/scripts'));
 app.use('/api/contractors', require('./routes/contractors'));
 app.use('/api/payouts', require('./routes/payouts'));
 
+
+app.use('/api/forwork', require('./routes/forwork'));
+app.use('/api/files', require('./routes/files'));
+app.use('/api/import', require('./routes/import'));
+
+app.post('/forwork-webhook', async (req, res) => {
+  try {
+    const { handleUpdate } = require('./services/forworkBot');
+    await handleUpdate(req.body);
+    res.json({ ok: true });
+  } catch(e) {
+    console.error('[FORWORK BOT]', e.message);
+    res.json({ ok: true });
+  }
+});
+
 app.get('/health', (req, res) => res.json({ status: 'ok', ts: new Date() }));
 
 io.on('connection', (socket) => {
