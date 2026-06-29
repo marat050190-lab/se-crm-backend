@@ -87,7 +87,7 @@ router.patch('/:id/status', async (req, res) => {
   const { status } = req.body;
   try {
     const result = await pool.query(
-      'UPDATE payouts SET status=$1, executed_at=CASE WHEN $1='done' THEN NOW() ELSE executed_at END WHERE id=$2 RETURNING *',
+      `UPDATE payouts SET status=$1, executed_at=CASE WHEN $1='done' THEN NOW() ELSE executed_at END WHERE id=$2 RETURNING *`,
       [status, req.params.id]
     );
     res.json(result.rows[0]);
