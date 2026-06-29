@@ -91,10 +91,11 @@ router.post('/', authMiddleware, async (req, res) => {
     const net = calcProfit(calc_scheme, revenue, executorCost);
     const { rows } = await pool.query(
       `INSERT INTO orders
-       (client_id, manager_id, legal_entity, service_type, work_date, address,
+       (client_id, manager_id, dispatcher_id, legal_entity, service_type, work_date, address,
         client_rate, executor_rate, units, calc_scheme, revenue, executor_cost, net_profit, payment_method, comment)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) RETURNING *`,
-      [client_id, req.user.id, legal_entity, service_type, work_date || null, address,
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) RETURNING *`,
+      [client_id, req.user.id, req.user.role === 'dispatcher' ? req.user.id : null,
+       legal_entity, service_type, work_date || null, address,
        client_rate, executor_rate, u, calc_scheme, revenue, executorCost, net, payment_method, comment]
     );
     res.json(rows[0]);

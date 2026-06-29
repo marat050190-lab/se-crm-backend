@@ -8,13 +8,17 @@ router.get('/', authMiddleware, async (req, res) => {
   try {
     const { role, id } = req.user;
     const seeAll = ['super_admin', 'admin', 'cs_head'].includes(role);
+    const isDispatcher = role === 'dispatcher';
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 50;
     const offset = (page - 1) * limit;
     const search = req.query.search || '';
 
     let where, params;
-    if (seeAll) {
+    if (isDispatcher) {
+      where = `WHERE c.id IN (SELECT client_id FROM orders WHERE dispatcher_id=$1 AND status NOT IN ('completed','cancelled'))`;
+      params = [id];
+    } else if (seeAll) {
       where = search ? `WHERE (c.name ILIKE $1 OR c.phone ILIKE $1 OR c.company_name ILIKE $1)` : '';
       params = search ? [`%${search}%`] : [];
     } else if (role === 'rop') {
