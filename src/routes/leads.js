@@ -47,8 +47,8 @@ router.get('/', async (req, res) => {
     conditions.push(`l.client_type = 'individual' AND l.assigned_to = $${i++}`);
     params.push(req.user.id);
   } else if (role === 'cs_manager') {
-    // КС видит юрлиц после согласования
-    conditions.push(`l.client_type = 'legal' AND l.status = 'b2b_approved' AND l.assigned_to = $${i++}`);
+    // КС видит юрлиц после согласования которые назначены на него
+    conditions.push(`l.status = 'b2b_approved' AND l.assigned_to = $${i++}`);
     params.push(req.user.id);
   } else {
     // Всё остальное — только свои
