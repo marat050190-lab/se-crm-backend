@@ -209,6 +209,39 @@ router.post('/bot-webhook', async (req, res) => {
   }
 });
 
+
+// POST /api/forwork/register — заполнение профиля после входа
+router.post('/register', async (req, res) => {
+  const { first_name, last_name, middle_name, age, phone, city, is_self_employed } = req.body;
+  if (!first_name || !last_name || !city) return res.status(400).json({ error: 'Заполните все обязательные поля' });
+
+  const authHeader = req.headers.authorization;
+  if (!authHeader) return res.status(401).json({ error: 'Нет токена' });
+
+  try {
+    const jwt = require('jsonwebtoken');
+    const decoded = jwt.verify(authHeader.replace('Bearer ', ''), process.env.JWT_SECRET || 'forwork_secret');
+    const contractorId = decoded.id;
+
+    const { rows } = await pool.query(
+      `UPDATE contractors SET first_name=$1, last_name=$2, middle_name=$3, age=$4, phone=$5, city=$6, is_self_employed=$7, status='active'
+       WHERE id=$8 RETURNING *`,
+      [first_name, last_name, middle_name || null, age || null, phone || null, city, is_self_employed || false, contractorId]
+    );
+
+    const contractor = rows[0];
+    const token = jwt.sign(
+      { id: contractor.id, telegram_id: contractor.telegram_id, role: 'contractor' },
+      process.env.JWT_SECRET || 'forwork_secret',
+      { expiresIn: '30d' }
+    );
+
+    res.json({ ok: true, token, contractor });
+  } catch(e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // Старые роуты — оставляем для совместимости
 router.post('/send-code', async (req, res) => {
   res.status(410).json({ error: 'Этот метод устарел. Используйте /auth/start' });
