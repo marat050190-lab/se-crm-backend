@@ -57,7 +57,7 @@ router.get('/dispatcher', authMiddleware, async (req, res) => {
   try {
     const userId = req.user.id;
 
-    const today = await req.db.query(`
+    const today = await pool.query(`
       SELECT
         COUNT(*) FILTER (WHERE DATE(created_at) = CURRENT_DATE) as today_total,
         COUNT(*) FILTER (WHERE status = 'in_progress' AND assigned_to = $1) as in_progress,
@@ -67,7 +67,7 @@ router.get('/dispatcher', authMiddleware, async (req, res) => {
       WHERE assigned_to = $1
     `, [userId]);
 
-    const rejectReasons = await req.db.query(`
+    const rejectReasons = await pool.query(`
       SELECT lost_reason, COUNT(*) as count
       FROM leads
       WHERE assigned_to = $1 AND lost_reason IS NOT NULL
@@ -75,14 +75,14 @@ router.get('/dispatcher', authMiddleware, async (req, res) => {
       GROUP BY lost_reason ORDER BY count DESC
     `, [userId]);
 
-    const conversion = await req.db.query(`
+    const conversion = await pool.query(`
       SELECT COUNT(*) as total,
         COUNT(*) FILTER (WHERE status IN ('transferred_mfl','transferred_b2b','taken')) as converted
       FROM leads
       WHERE assigned_to = $1 AND created_at >= NOW() - INTERVAL '30 days'
     `, [userId]);
 
-    const avgResponse = await req.db.query(`
+    const avgResponse = await pool.query(`
       SELECT AVG(EXTRACT(EPOCH FROM (lh.created_at - l.created_at))/60) as avg_minutes
       FROM lead_history lh
       JOIN leads l ON l.id = lh.lead_id
@@ -90,7 +90,7 @@ router.get('/dispatcher', authMiddleware, async (req, res) => {
         AND lh.user_id = $1 AND lh.created_at >= NOW() - INTERVAL '30 days'
     `, [userId]);
 
-    const byStatus = await req.db.query(`
+    const byStatus = await pool.query(`
       SELECT status, COUNT(*) as count FROM leads
       WHERE assigned_to = $1 AND created_at >= NOW() - INTERVAL '30 days'
       GROUP BY status ORDER BY count DESC

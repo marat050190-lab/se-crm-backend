@@ -50,7 +50,7 @@ router.post('/scripts', async (req, res) => {
   if (req.query.secret !== 'se-migrate-2024') return res.status(403).json({ error: 'Forbidden' });
   try {
     const sql = fs.readFileSync(path.join(__dirname, '../db/migrate_scripts.sql'), 'utf8');
-    await req.db.query(sql);
+    await pool.query(sql);
     res.json({ ok: true, message: 'scripts migration done' });
   } catch (err) {
     res.status(500).json({ error: err.message });
