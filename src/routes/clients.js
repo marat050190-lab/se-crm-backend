@@ -22,7 +22,7 @@ router.get('/', authMiddleware, async (req, res) => {
       where = search ? `WHERE (c.name ILIKE $1 OR c.phone ILIKE $1 OR c.company_name ILIKE $1)` : '';
       params = search ? [`%${search}%`] : [];
     } else if (role === 'rop') {
-      where = `WHERE (c.manager_id=$1 OR c.manager_id IN (SELECT id FROM users WHERE rop_id=$1 AND role IN ('dispatcher','b2b_manager','mfl_manager')) OR (c.manager_id IN (SELECT id FROM users WHERE rop_id=$1 AND role = 'cs_manager') AND c.created_at > NOW() - INTERVAL '90 days' AND c.id IN (SELECT DISTINCT client_id FROM orders WHERE dispatcher_id IS NOT NULL)))${search ? ` AND (c.name ILIKE $2 OR c.phone ILIKE $2)` : ''}`;
+      where = `WHERE c.lead_id IS NOT NULL AND (c.manager_id=$1 OR c.manager_id IN (SELECT id FROM users WHERE rop_id=$1 AND role IN ('dispatcher','b2b_manager','mfl_manager')) OR (c.manager_id IN (SELECT id FROM users WHERE rop_id=$1 AND role = 'cs_manager') AND c.created_at > NOW() - INTERVAL '90 days' AND c.id IN (SELECT DISTINCT client_id FROM orders WHERE dispatcher_id IS NOT NULL)))${search ? ` AND (c.name ILIKE $2 OR c.phone ILIKE $2)` : ''}`;
       params = search ? [id, `%${search}%`] : [id];
     } else {
       where = `WHERE c.manager_id=$1${search ? ` AND (c.name ILIKE $2 OR c.phone ILIKE $2)` : ''}`;
