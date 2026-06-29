@@ -10,6 +10,20 @@ const MAILBOXES = [
     host: 'imap.mail.ru',
     port: 993,
     tls: true,
+  },
+  {
+    user: 'info@gruzovoi-potok.ru',
+    password: '0DbvwrTEuhlnsW5R16vO',
+    host: 'imap.mail.ru',
+    port: 993,
+    tls: true,
+  },
+  {
+    user: 'info@rabochiye.ru',
+    password: 'GcpKBHplq1el2Bqou26s',
+    host: 'imap.mail.ru',
+    port: 993,
+    tls: true,
   }
 ];
 
