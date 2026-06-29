@@ -29,12 +29,7 @@ router.get('/', async (req, res) => {
 
   // Фильтрация по роли
   if (ADMIN_ROLES.includes(role)) {
-    // Для РОПа — только его команда
-    if (role === 'rop') {
-      conditions.push(`(l.assigned_to IN (SELECT id FROM users WHERE rop_id=$${i}) OR l.assigned_to=$${i})`);
-      params.push(req.user.id);
-      i++;
-    }
+    // Видят всё, фильтр по assigned_to опциональный
     if (assigned_to) {
       conditions.push(`l.assigned_to = $${i++}`);
       params.push(assigned_to);
