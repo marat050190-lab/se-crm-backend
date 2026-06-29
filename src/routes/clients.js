@@ -45,7 +45,7 @@ router.get('/', authMiddleware, async (req, res) => {
 // Один клиент + его заказы
 router.get('/:id', authMiddleware, async (req, res) => {
   try {
-    const c = await pool.query('SELECT * FROM clients WHERE id=$1', [req.params.id]);
+    const c = await pool.query(`SELECT c.*, u.name AS manager_name, l.status AS lead_status FROM clients c LEFT JOIN users u ON u.id=c.manager_id LEFT JOIN leads l ON l.id=c.lead_id WHERE c.id=$1`, [req.params.id]);
     if (!c.rows.length) return res.status(404).json({ error: 'Not found' });
     const o = await pool.query('SELECT * FROM orders WHERE client_id=$1 ORDER BY created_at DESC', [req.params.id]);
     res.json({ client: c.rows[0], orders: o.rows });
