@@ -111,7 +111,12 @@ router.get('/:id', async (req, res) => {
       if (role === 'dispatcher' && lead.source === 'email') {
         return res.status(403).json({ error: 'Нет доступа' });
       }
-      if (['mfl_manager', 'cs_manager', 'b2b_manager'].includes(role) && lead.assigned_to !== req.user.id) {
+      if (role === 'b2b_manager') {
+        const b2bStatuses = ['transferred_b2b', 'b2b_negotiations', 'b2b_approved', 'b2b_rejected'];
+        if (!b2bStatuses.includes(lead.status)) {
+          return res.status(403).json({ error: 'Нет доступа' });
+        }
+      } else if (['mfl_manager', 'cs_manager'].includes(role) && lead.assigned_to !== req.user.id) {
         return res.status(403).json({ error: 'Нет доступа' });
       }
     }
