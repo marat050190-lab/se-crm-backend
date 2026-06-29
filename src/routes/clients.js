@@ -8,21 +8,33 @@ router.get('/', authMiddleware, async (req, res) => {
   try {
     const { role, id } = req.user;
     const seeAll = ['super_admin', 'admin', 'cs_head'].includes(role);
-    let sql, params;
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 50;
+    const offset = (page - 1) * limit;
+    const search = req.query.search || '';
+
+    let where, params;
     if (seeAll) {
-      sql = `SELECT c.*, u.name AS manager_name FROM clients c LEFT JOIN users u ON u.id=c.manager_id ORDER BY c.created_at DESC`;
-      params = [];
+      where = search ? `WHERE (c.name ILIKE $1 OR c.phone ILIKE $1 OR c.company_name ILIKE $1)` : '';
+      params = search ? [`%${search}%`] : [];
     } else if (role === 'rop') {
-      sql = `SELECT c.*, u.name AS manager_name FROM clients c LEFT JOIN users u ON u.id=c.manager_id
-             WHERE c.manager_id=$1 OR c.manager_id IN (SELECT id FROM users WHERE rop_id=$1)
-             ORDER BY c.created_at DESC`;
-      params = [id];
+      where = `WHERE (c.manager_id=$1 OR c.manager_id IN (SELECT id FROM users WHERE rop_id=$1))${search ? ` AND (c.name ILIKE $2 OR c.phone ILIKE $2)` : ''}`;
+      params = search ? [id, `%${search}%`] : [id];
     } else {
-      sql = `SELECT c.*, u.name AS manager_name FROM clients c LEFT JOIN users u ON u.id=c.manager_id WHERE c.manager_id=$1 ORDER BY c.created_at DESC`;
-      params = [id];
+      where = `WHERE c.manager_id=$1${search ? ` AND (c.name ILIKE $2 OR c.phone ILIKE $2)` : ''}`;
+      params = search ? [id, `%${search}%`] : [id];
     }
-    const { rows } = await pool.query(sql, params);
-    res.json(rows);
+
+    const countRes = await pool.query(`SELECT COUNT(*) FROM clients c ${where}`, params);
+    const total = parseInt(countRes.rows[0].count);
+    const pages = Math.ceil(total / limit);
+
+    const dataParams = [...params, limit, offset];
+    const { rows } = await pool.query(
+      `SELECT c.*, u.name AS manager_name FROM clients c LEFT JOIN users u ON u.id=c.manager_id ${where} ORDER BY c.created_at DESC LIMIT $${dataParams.length-1} OFFSET $${dataParams.length}`,
+      dataParams
+    );
+    res.json({ clients: rows, total, pages, page });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
