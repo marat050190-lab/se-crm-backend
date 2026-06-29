@@ -87,6 +87,15 @@ router.get('/check-table/:table', async (req, res) => {
   }
 });
 
+
+router.post('/dispatcher-id', async (req, res) => {
+  if (req.headers['x-migrate-secret'] !== 'se-migrate-2024') return res.status(403).json({ error: 'Forbidden' });
+  try {
+    await pool.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS dispatcher_id INTEGER REFERENCES users(id)`);
+    res.json({ ok: true, message: 'dispatcher_id added to orders' });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
 module.exports = router;
 
 const bcrypt = require('bcryptjs');
