@@ -212,24 +212,12 @@ router.post('/bot-webhook', async (req, res) => {
 
 // POST /api/forwork/register — заполнение профиля после входа
 router.post('/register', async (req, res) => {
-  const { first_name, last_name, middle_name, age, phone, city, is_self_employed } = req.body;
+  const { first_name, last_name, middle_name, age, phone, city, is_self_employed, contractor_id } = req.body;
   if (!first_name || !last_name || !city) return res.status(400).json({ error: 'Заполните все обязательные поля' });
-
-  const authHeader = req.headers.authorization;
-  if (!authHeader) return res.status(401).json({ error: 'Нет токена' });
+  if (!contractor_id) return res.status(400).json({ error: 'Нет ID исполнителя' });
 
   try {
-    const jwt = require('jsonwebtoken');
-    let contractorId;
-    try {
-      const decoded = jwt.verify(authHeader.replace('Bearer ', ''), process.env.JWT_SECRET || 'forwork_secret');
-      contractorId = decoded.id;
-    } catch(e) {
-      // Попробуем декодировать без верификации для совместимости
-      const decoded = jwt.decode(authHeader.replace('Bearer ', ''));
-      if (!decoded || !decoded.id) return res.status(401).json({ error: 'Невалидный токен' });
-      contractorId = decoded.id;
-    }
+    const contractorId = contractor_id;
 
     const { rows } = await pool.query(
       `UPDATE contractors SET first_name=$1, last_name=$2, middle_name=$3, age=$4, phone=$5, city=$6, is_self_employed=$7, status='active'
