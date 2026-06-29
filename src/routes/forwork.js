@@ -1,9 +1,13 @@
 const express = require('express');
 const router = express.Router();
 const pool = require('../db/pool');
+const crypto = require('crypto');
 
 const BOT_TOKEN = process.env.FORWORK_BOT_TOKEN;
-const CODES = {}; // временное хранилище кодов {phone: {code, expires}}
+const BOT_USERNAME = process.env.FORWORK_BOT_USERNAME || 'forwork_ru_bot';
+const SESSION_TTL = 5 * 60 * 1000; // 5 минут
+const MAX_ATTEMPTS = 5;
+const RESEND_COOLDOWN = 60 * 1000; // 60 секунд
 
 async function sendTelegram(chatId, text) {
   const https = require('https');
@@ -26,168 +30,192 @@ async function sendTelegram(chatId, text) {
   });
 }
 
-// POST /api/forwork/send-code
-// Отправляет код подтверждения в Telegram
-router.post('/send-code', async (req, res) => {
-  let { phone } = req.body;
-  if (!phone) return res.status(400).json({ error: 'Укажите телефон' });
-  phone = '+7' + phone.replace(/\D/g, '').replace(/^[78]/, '');
+function hashCode(code) {
+  return crypto.createHash('sha256').update(code + 'forwork_salt').digest('hex');
+}
 
+// POST /api/forwork/auth/start — создать сессию и вернуть deep link
+router.post('/auth/start', async (req, res) => {
   try {
-    // Ищем исполнителя по телефону
-    const { rows } = await pool.query(
-      'SELECT * FROM contractors WHERE phone = $1', [phone.replace(/\D/g, '')]
+    const payload = crypto.randomBytes(32).toString('hex');
+    const expiresAt = new Date(Date.now() + SESSION_TTL);
+
+    await pool.query(
+      `INSERT INTO forwork_auth_sessions (start_payload, status, expires_at)
+       VALUES ($1, 'pending', $2)`,
+      [payload, expiresAt]
     );
 
-    // Генерируем 6-значный код
-    const code = Math.floor(100000 + Math.random() * 900000).toString();
-    const expires = Date.now() + 10 * 60 * 1000; // 10 минут
-
-    CODES[phone] = { code, expires, isNew: rows.length === 0 };
-
-    if (rows.length > 0 && rows[0].telegram_id) {
-      // Отправляем код в Telegram
-      await sendTelegram(rows[0].telegram_id,
-        `🔐 Ваш код для входа в ForWork:\n\n<b>${code}</b>\n\nКод действителен 10 минут. Не передавайте его никому.`
-      );
-      res.json({ ok: true, isNew: false });
-    } else {
-      // Новый исполнитель — возвращаем код (он введёт его сам)
-      // В продакшне здесь можно отправить SMS
-      res.json({ ok: true, isNew: true, code }); // временно для теста
-    }
+    res.json({
+      sessionId: payload,
+      telegramDeepLink: `https://t.me/${BOT_USERNAME}?start=${payload}`,
+      expiresAt
+    });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
 });
 
-// POST /api/forwork/verify-code
-router.post('/verify-code', async (req, res) => {
-  let { phone, code } = req.body;
-  phone = '+7' + phone.replace(/\D/g, '').replace(/^[78]/, '');
-  const stored = CODES[phone];
-
-  if (!stored) return res.status(400).json({ error: 'Код не найден. Запросите новый.' });
-  if (Date.now() > stored.expires) return res.status(400).json({ error: 'Код истёк. Запросите новый.' });
-  if (stored.code !== code) return res.status(400).json({ error: 'Неверный код.' });
-
-  delete CODES[phone];
-
-  const cleanPhone = phone.replace(/\D/g, '');
-  const { rows } = await pool.query('SELECT * FROM contractors WHERE phone = $1', [cleanPhone]);
-
-  if (rows.length > 0) {
-    const contractor = rows[0];
-    const jwt = require('jsonwebtoken');
-    const token = jwt.sign({ id: contractor.id, role: 'contractor' }, process.env.JWT_SECRET, { expiresIn: '30d' });
-    res.json({ ok: true, token, contractor, isNew: false });
-  } else {
-    res.json({ ok: true, isNew: true, phone: cleanPhone });
-  }
-});
-
-// POST /api/forwork/register
-router.post('/register', async (req, res) => {
-  const { first_name, last_name, middle_name, age, phone, is_self_employed, city, telegram_id } = req.body;
-  if (!first_name || !last_name || !phone) return res.status(400).json({ error: 'Заполните обязательные поля' });
+// POST /api/forwork/auth/verify — проверить код
+router.post('/auth/verify', async (req, res) => {
+  const { sessionId, code } = req.body;
+  if (!sessionId || !code) return res.status(400).json({ error: 'Укажите sessionId и code' });
 
   try {
-    const name = [last_name, first_name, middle_name].filter(Boolean).join(' ');
     const { rows } = await pool.query(
-      `INSERT INTO contractors (name, phone, inn, type, specialization, city, is_self_employed, telegram_id, status, created_at)
-       VALUES ($1, $2, '', 'self_employed', 'mover', $3, $4, $5, 'active', NOW()) RETURNING *`,
-      [name, phone.replace(/\D/g, ''), city || '', is_self_employed || false, telegram_id || null]
+      'SELECT * FROM forwork_auth_sessions WHERE start_payload = $1', [sessionId]
     );
-    const contractor = rows[0];
+
+    if (!rows.length) return res.status(400).json({ error: 'Сессия не найдена. Начните вход заново.' });
+    const session = rows[0];
+
+    if (session.status === 'verified') return res.status(400).json({ error: 'Код уже использован.' });
+    if (session.status === 'expired' || new Date() > new Date(session.expires_at)) {
+      await pool.query('UPDATE forwork_auth_sessions SET status=$1 WHERE start_payload=$2', ['expired', sessionId]);
+      return res.status(400).json({ error: 'Код устарел. Запросите новый.' });
+    }
+    if (session.status !== 'code_sent') return res.status(400).json({ error: 'Код ещё не отправлен. Откройте Telegram-бота.' });
+    if (session.attempts >= MAX_ATTEMPTS) return res.status(400).json({ error: 'Слишком много попыток. Запросите новый код.' });
+
+    await pool.query(
+      'UPDATE forwork_auth_sessions SET attempts = attempts + 1 WHERE start_payload = $1', [sessionId]
+    );
+
+    if (hashCode(code) !== session.code_hash) {
+      const attemptsLeft = MAX_ATTEMPTS - session.attempts - 1;
+      return res.status(400).json({ error: `Неверный код. Осталось попыток: ${attemptsLeft}` });
+    }
+
+    // Код верный — авторизуем
+    await pool.query(
+      'UPDATE forwork_auth_sessions SET status=$1, confirmed_at=$2 WHERE start_payload=$3',
+      ['verified', new Date(), sessionId]
+    );
+
+    // Находим или создаём исполнителя по telegram_id
+    const tgId = session.telegram_user_id;
+    let contractor = null;
+    const existing = await pool.query('SELECT * FROM contractors WHERE telegram_id = $1', [tgId.toString()]);
+
+    if (existing.rows.length > 0) {
+      contractor = existing.rows[0];
+    } else {
+      const created = await pool.query(
+        `INSERT INTO contractors (telegram_id, status) VALUES ($1, 'new') RETURNING *`,
+        [tgId.toString()]
+      );
+      contractor = created.rows[0];
+    }
+
     const jwt = require('jsonwebtoken');
-    const token = jwt.sign({ id: contractor.id, role: 'contractor' }, process.env.JWT_SECRET, { expiresIn: '30d' });
+    const token = jwt.sign(
+      { id: contractor.id, telegram_id: tgId, role: 'contractor' },
+      process.env.JWT_SECRET || 'forwork_secret',
+      { expiresIn: '30d' }
+    );
+
     res.json({ ok: true, token, contractor });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
 });
 
-// GET /api/forwork/orders — список доступных заказов
-router.get('/orders', async (req, res) => {
+// POST /api/forwork/auth/resend — повторно отправить код
+router.post('/auth/resend', async (req, res) => {
+  const { sessionId } = req.body;
+  if (!sessionId) return res.status(400).json({ error: 'Укажите sessionId' });
+
   try {
-    const jwt = require('jsonwebtoken');
-    const auth = req.headers.authorization?.split(' ')[1];
-    if (!auth) return res.status(401).json({ error: 'Не авторизован' });
-    const decoded = jwt.verify(auth, process.env.JWT_SECRET);
+    const { rows } = await pool.query(
+      'SELECT * FROM forwork_auth_sessions WHERE start_payload = $1', [sessionId]
+    );
 
-    const { rows } = await pool.query(`
-      SELECT o.*, c.name as client_name
-      FROM orders o
-      LEFT JOIN clients c ON c.id = o.client_id
-      WHERE o.status = 'new' AND o.contractor_id IS NULL
-      ORDER BY o.created_at DESC
-      LIMIT 50
-    `);
-    res.json(rows);
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
-});
+    if (!rows.length) return res.status(400).json({ error: 'Сессия не найдена.' });
+    const session = rows[0];
 
-// POST /api/forwork/orders/:id/take — взять заказ
-router.post('/orders/:id/take', async (req, res) => {
-  try {
-    const jwt = require('jsonwebtoken');
-    const auth = req.headers.authorization?.split(' ')[1];
-    if (!auth) return res.status(401).json({ error: 'Не авторизован' });
-    const decoded = jwt.verify(auth, process.env.JWT_SECRET);
+    if (new Date() > new Date(session.expires_at)) return res.status(400).json({ error: 'Сессия устарела. Начните заново.' });
+    if (!session.telegram_user_id) return res.status(400).json({ error: 'Сначала откройте Telegram-бота.' });
 
-    // Проверяем что заказ ещё свободен
-    const check = await pool.query('SELECT * FROM orders WHERE id=$1 AND contractor_id IS NULL', [req.params.id]);
-    if (check.rows.length === 0) return res.status(400).json({ error: 'Заказ уже занят' });
+    if (session.last_resend_at && Date.now() - new Date(session.last_resend_at).getTime() < RESEND_COOLDOWN) {
+      return res.status(429).json({ error: 'Подождите 60 секунд перед повторной отправкой.' });
+    }
+
+    const code = Math.floor(100000 + Math.random() * 900000).toString();
+    const newExpires = new Date(Date.now() + SESSION_TTL);
 
     await pool.query(
-      'UPDATE orders SET contractor_id=$1, status=$2 WHERE id=$3',
-      [decoded.id, 'pay_executor', req.params.id]
+      `UPDATE forwork_auth_sessions SET code_hash=$1, status='code_sent', expires_at=$2, attempts=0, last_resend_at=$3
+       WHERE start_payload=$4`,
+      [hashCode(code), newExpires, new Date(), sessionId]
     );
+
+    await sendTelegram(session.telegram_user_id,
+      `🔐 Новый код для входа в ForWork:\n\n<b>${code}</b>\n\nКод действителен 5 минут. Не передавайте его никому.`
+    );
+
     res.json({ ok: true });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
 });
 
-// GET /api/forwork/my-orders — мои заказы
-router.get('/my-orders', async (req, res) => {
+// Webhook от Telegram бота — обработка /start <payload>
+router.post('/bot-webhook', async (req, res) => {
   try {
-    const jwt = require('jsonwebtoken');
-    const auth = req.headers.authorization?.split(' ')[1];
-    if (!auth) return res.status(401).json({ error: 'Не авторизован' });
-    const decoded = jwt.verify(auth, process.env.JWT_SECRET);
+    const { message } = req.body;
+    if (!message || !message.text) return res.json({ ok: true });
 
-    const { rows } = await pool.query(`
-      SELECT o.*, c.name as client_name
-      FROM orders o
-      LEFT JOIN clients c ON c.id = o.client_id
-      WHERE o.contractor_id = $1
-      ORDER BY o.created_at DESC
-    `, [decoded.id]);
-    res.json(rows);
+    const text = message.text.trim();
+    const tgUser = message.from;
+
+    if (text.startsWith('/start ')) {
+      const payload = text.replace('/start ', '').trim();
+
+      const { rows } = await pool.query(
+        'SELECT * FROM forwork_auth_sessions WHERE start_payload = $1 AND status = $2',
+        [payload, 'pending']
+      );
+
+      if (!rows.length) {
+        await sendTelegram(tgUser.id, '❌ Ссылка устарела или уже использована. Вернитесь в приложение и начните вход заново.');
+        return res.json({ ok: true });
+      }
+
+      const session = rows[0];
+      if (new Date() > new Date(session.expires_at)) {
+        await pool.query('UPDATE forwork_auth_sessions SET status=$1 WHERE start_payload=$2', ['expired', payload]);
+        await sendTelegram(tgUser.id, '❌ Сессия входа устарела. Вернитесь в приложение и начните заново.');
+        return res.json({ ok: true });
+      }
+
+      const code = Math.floor(100000 + Math.random() * 900000).toString();
+      const newExpires = new Date(Date.now() + SESSION_TTL);
+
+      await pool.query(
+        `UPDATE forwork_auth_sessions SET telegram_user_id=$1, code_hash=$2, status='code_sent', expires_at=$3, last_resend_at=$4
+         WHERE start_payload=$5`,
+        [tgUser.id, hashCode(code), newExpires, new Date(), payload]
+      );
+
+      await sendTelegram(tgUser.id,
+        `👋 Привет, ${tgUser.first_name}!\n\n🔐 Ваш код для входа в ForWork:\n\n<b>${code}</b>\n\nВернитесь в приложение и введите этот код.\nКод действует 5 минут.`
+      );
+    }
+
+    res.json({ ok: true });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    console.error('Bot webhook error:', e);
+    res.json({ ok: true });
   }
 });
 
-// POST /api/forwork/orders/:id/complete — выполнено
-router.post('/orders/:id/complete', async (req, res) => {
-  try {
-    const jwt = require('jsonwebtoken');
-    const auth = req.headers.authorization?.split(' ')[1];
-    if (!auth) return res.status(401).json({ error: 'Не авторизован' });
-    const decoded = jwt.verify(auth, process.env.JWT_SECRET);
+// Старые роуты — оставляем для совместимости
+router.post('/send-code', async (req, res) => {
+  res.status(410).json({ error: 'Этот метод устарел. Используйте /auth/start' });
+});
 
-    await pool.query(
-      'UPDATE orders SET status=$1 WHERE id=$2 AND contractor_id=$3',
-      ['done', req.params.id, decoded.id]
-    );
-    res.json({ ok: true });
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
+router.post('/verify-code', async (req, res) => {
+  res.status(410).json({ error: 'Этот метод устарел. Используйте /auth/verify' });
 });
 
 module.exports = router;
