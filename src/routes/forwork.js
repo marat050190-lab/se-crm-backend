@@ -242,6 +242,79 @@ router.post('/register', async (req, res) => {
   }
 });
 
+
+// GET /api/forwork/orders — список доступных заказов
+router.get('/orders', async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader) return res.status(401).json({ error: 'Нет токена' });
+    const jwt = require('jsonwebtoken');
+    jwt.verify(authHeader.replace('Bearer ', ''), process.env.JWT_SECRET || 'forwork_secret');
+
+    const { rows } = await pool.query(`
+      SELECT o.*, c.name as client_name
+      FROM orders o
+      LEFT JOIN clients c ON c.id = o.client_id
+      WHERE o.status = 'new'
+      ORDER BY o.created_at DESC
+    `);
+    res.json(rows);
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// GET /api/forwork/my-orders — мои заказы
+router.get('/my-orders', async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader) return res.status(401).json({ error: 'Нет токена' });
+    const jwt = require('jsonwebtoken');
+    const decoded = jwt.verify(authHeader.replace('Bearer ', ''), process.env.JWT_SECRET || 'forwork_secret');
+
+    const { rows } = await pool.query(`
+      SELECT o.*, c.name as client_name
+      FROM orders o
+      LEFT JOIN clients c ON c.id = o.client_id
+      WHERE o.contractor_id = $1
+      ORDER BY o.created_at DESC
+    `, [decoded.id]);
+    res.json(rows);
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// POST /api/forwork/orders/:id/take — взять заказ
+router.post('/orders/:id/take', async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader) return res.status(401).json({ error: 'Нет токена' });
+    const jwt = require('jsonwebtoken');
+    const decoded = jwt.verify(authHeader.replace('Bearer ', ''), process.env.JWT_SECRET || 'forwork_secret');
+
+    const { rows } = await pool.query(
+      `UPDATE orders SET status='in_progress', contractor_id=$1 WHERE id=$2 AND status='new' RETURNING *`,
+      [decoded.id, req.params.id]
+    );
+    if (!rows.length) return res.status(400).json({ error: 'Заказ недоступен' });
+    res.json({ ok: true, order: rows[0] });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// POST /api/forwork/orders/:id/complete — выполнить заказ
+router.post('/orders/:id/complete', async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader) return res.status(401).json({ error: 'Нет токена' });
+    const jwt = require('jsonwebtoken');
+    const decoded = jwt.verify(authHeader.replace('Bearer ', ''), process.env.JWT_SECRET || 'forwork_secret');
+
+    const { rows } = await pool.query(
+      `UPDATE orders SET status='done' WHERE id=$1 AND contractor_id=$2 RETURNING *`,
+      [req.params.id, decoded.id]
+    );
+    if (!rows.length) return res.status(400).json({ error: 'Заказ не найден' });
+    res.json({ ok: true });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
 // Старые роуты — оставляем для совместимости
 router.post('/send-code', async (req, res) => {
   res.status(410).json({ error: 'Этот метод устарел. Используйте /auth/start' });
