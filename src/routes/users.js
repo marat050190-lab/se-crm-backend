@@ -44,7 +44,8 @@ router.patch('/:id', async (req, res) => {
   if (!ADMIN_ROLES.includes(req.user.role)) {
     return res.status(403).json({ error: 'Недостаточно прав' });
   }
-  const { name, phone, beeline_extension, telegram_id, role, is_active, password, email, rop_id } = req.body;
+  const { name, phone, beeline_extension, telegram_id, role, is_active, password, email } = req.body;
+  const rop_id = req.body.rop_id || null;
   try {
     let passwordHash = null;
     if (password) passwordHash = await bcrypt.hash(password, 10);
