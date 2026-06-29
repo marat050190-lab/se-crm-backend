@@ -16,7 +16,7 @@ router.get('/', authMiddleware, async (req, res) => {
 
     let where, params;
     if (isDispatcher) {
-      where = `WHERE c.id IN (SELECT client_id FROM orders WHERE dispatcher_id=$1 AND status NOT IN ('completed','cancelled'))`;
+      where = `WHERE c.id IN (SELECT client_id FROM orders WHERE dispatcher_id=$1)`;
       params = [id];
     } else if (seeAll) {
       where = search ? `WHERE (c.name ILIKE $1 OR c.phone ILIKE $1 OR c.company_name ILIKE $1)` : '';
