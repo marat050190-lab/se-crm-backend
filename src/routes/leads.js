@@ -271,6 +271,19 @@ router.patch('/:id/status', async (req, res) => {
       }
     }
 
+    // Автоматически создаём клиента при b2b_approved
+    if (status === 'b2b_approved') {
+      const existing = await pool.query('SELECT id FROM clients WHERE lead_id = $1', [req.params.id]);
+      if (existing.rows.length === 0) {
+        await pool.query(
+          `INSERT INTO clients (name, phone, client_type, company_name, manager_id, lead_id)
+           VALUES ($1, $2, $3, $4, $5, $6)`,
+          [lead.client_name || lead.client_phone, lead.client_phone, lead.client_type || 'legal',
+           lead.client_company, lead.assigned_to, req.params.id]
+        );
+      }
+    }
+
     res.json({ success: true, status });
   } catch (err) {
     console.error(err);
