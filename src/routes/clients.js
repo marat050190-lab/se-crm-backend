@@ -68,11 +68,11 @@ router.post('/', authMiddleware, async (req, res) => {
 // Обновить клиента
 router.put('/:id', authMiddleware, async (req, res) => {
   try {
-    const { name, phone, client_type, company_name, inn, comment } = req.body;
+    const { name, phone, client_type, company_name, inn, comment, manager_id } = req.body;
     const { rows } = await pool.query(
-      `UPDATE clients SET name=$1, phone=$2, client_type=$3, company_name=$4, inn=$5, comment=$6
+      `UPDATE clients SET name=$1, phone=$2, client_type=$3, company_name=$4, inn=$5, comment=$6, manager_id=COALESCE($8, manager_id)
        WHERE id=$7 RETURNING *`,
-      [name, phone, client_type, company_name, inn, comment, req.params.id]
+      [name, phone, client_type, company_name, inn, comment, req.params.id, manager_id || null]
     );
     res.json(rows[0]);
   } catch (e) { res.status(500).json({ error: e.message }); }
