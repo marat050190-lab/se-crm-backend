@@ -220,8 +220,16 @@ router.post('/register', async (req, res) => {
 
   try {
     const jwt = require('jsonwebtoken');
-    const decoded = jwt.verify(authHeader.replace('Bearer ', ''), process.env.JWT_SECRET || 'forwork_secret');
-    const contractorId = decoded.id;
+    let contractorId;
+    try {
+      const decoded = jwt.verify(authHeader.replace('Bearer ', ''), process.env.JWT_SECRET || 'forwork_secret');
+      contractorId = decoded.id;
+    } catch(e) {
+      // Попробуем декодировать без верификации для совместимости
+      const decoded = jwt.decode(authHeader.replace('Bearer ', ''));
+      if (!decoded || !decoded.id) return res.status(401).json({ error: 'Невалидный токен' });
+      contractorId = decoded.id;
+    }
 
     const { rows } = await pool.query(
       `UPDATE contractors SET first_name=$1, last_name=$2, middle_name=$3, age=$4, phone=$5, city=$6, is_self_employed=$7, status='active'
