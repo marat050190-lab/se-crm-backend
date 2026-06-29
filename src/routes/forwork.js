@@ -315,6 +315,19 @@ router.post('/orders/:id/complete', async (req, res) => {
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
+// GET /api/forwork/me — проверка токена
+router.get('/me', async (req, res) => {
+  const authHeader = req.headers.authorization;
+  if (!authHeader) return res.status(401).json({ error: 'Нет токена' });
+  try {
+    const jwt = require('jsonwebtoken');
+    const decoded = jwt.verify(authHeader.replace('Bearer ', ''), process.env.JWT_SECRET || 'forwork_secret');
+    res.json({ ok: true, decoded });
+  } catch(e) {
+    res.status(400).json({ error: e.message, token: authHeader.slice(0,30) });
+  }
+});
+
 // Старые роуты — оставляем для совместимости
 router.post('/send-code', async (req, res) => {
   res.status(410).json({ error: 'Этот метод устарел. Используйте /auth/start' });
