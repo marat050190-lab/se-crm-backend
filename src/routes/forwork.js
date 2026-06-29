@@ -29,8 +29,9 @@ async function sendTelegram(chatId, text) {
 // POST /api/forwork/send-code
 // Отправляет код подтверждения в Telegram
 router.post('/send-code', async (req, res) => {
-  const { phone } = req.body;
+  let { phone } = req.body;
   if (!phone) return res.status(400).json({ error: 'Укажите телефон' });
+  phone = '+7' + phone.replace(/\D/g, '').replace(/^[78]/, '');
 
   try {
     // Ищем исполнителя по телефону
@@ -62,7 +63,8 @@ router.post('/send-code', async (req, res) => {
 
 // POST /api/forwork/verify-code
 router.post('/verify-code', async (req, res) => {
-  const { phone, code } = req.body;
+  let { phone, code } = req.body;
+  phone = '+7' + phone.replace(/\D/g, '').replace(/^[78]/, '');
   const stored = CODES[phone];
 
   if (!stored) return res.status(400).json({ error: 'Код не найден. Запросите новый.' });
