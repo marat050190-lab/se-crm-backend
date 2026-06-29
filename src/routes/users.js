@@ -58,8 +58,7 @@ router.patch('/:id', async (req, res) => {
         telegram_id = COALESCE($6, telegram_id),
         role = COALESCE($7, role),
         is_active = COALESCE($8, is_active),
-        rop_id = COALESCE($9, rop_id)
-        ${passwordHash ? ', password_hash = $10' : ''}
+        ${passwordHash ? 'rop_id = COALESCE($9, rop_id), password_hash = $10' : 'rop_id = COALESCE($9, rop_id)'}
       WHERE id = $1
       RETURNING id, name, email, role, phone, beeline_extension, telegram_id, is_active
     `, passwordHash
