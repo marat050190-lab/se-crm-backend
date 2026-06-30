@@ -96,6 +96,18 @@ router.post('/dispatcher-id', async (req, res) => {
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
+router.post('/run-lead-emails', async (req, res) => {
+  const secret = req.query.secret;
+  if (secret !== 'se-migrate-2024') return res.status(403).json({ error: 'Forbidden' });
+  try {
+    const sql = fs.readFileSync(path.join(__dirname, '../db/migrate_lead_emails.sql'), 'utf8');
+    await pool.query(sql);
+    res.json({ ok: true, message: 'lead_emails migration applied' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;
 
 const bcrypt = require('bcryptjs');

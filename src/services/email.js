@@ -77,11 +77,15 @@ async function fetchEmails(io) {
           );
           if (dupCheck.rows.length > 0) {
             const existingLead = dupCheck.rows[0];
-            await pool.query(
-              `INSERT INTO lead_history (lead_id, user_id, action, comment) VALUES ($1, NULL, 'note', $2)`,
-              [existingLead.id, 'Новое письмо в переписке: ' + subject + '\n\n' + text.slice(0, 500)]
-            );
-            console.log('[EMAIL] Дубль от ' + fromEmail + ' → добавлено в историю лида ' + existingLead.lead_number);
+            const emailExists = await pool.query('SELECT id FROM lead_emails WHERE message_id = $1', [messageId]);
+            if (emailExists.rows.length === 0) {
+              await pool.query(
+                `INSERT INTO lead_emails (lead_id, message_id, direction, from_email, from_name, to_email, subject, body_text, body_html)
+                 VALUES ($1, $2, 'in', $3, $4, $5, $6, $7, $8)`,
+                [existingLead.id, messageId, fromEmail, fromName, mailbox.user, subject, text.slice(0, 5000), parsed.html ? parsed.html.slice(0, 10000) : null]
+              );
+              console.log('[EMAIL] Новое письмо от ' + fromEmail + ' → сохранено в lead_emails лида ' + existingLead.lead_number);
+            }
             continue;
           }
 
@@ -113,6 +117,12 @@ async function fetchEmails(io) {
             INSERT INTO lead_history (lead_id, user_id, action, comment)
             VALUES ($1, NULL, 'created', $2)
           `, [lead.id, 'Создан из email: ' + subject + ' (от ' + fromEmail + ')']);
+
+          await pool.query(
+            `INSERT INTO lead_emails (lead_id, message_id, direction, from_email, from_name, to_email, subject, body_text, body_html)
+             VALUES ($1, $2, 'in', $3, $4, $5, $6, $7, $8)`,
+            [lead.id, messageId, fromEmail, fromName, mailbox.user, subject, text.slice(0, 5000), parsed.html ? parsed.html.slice(0, 10000) : null]
+          );
 
           console.log('[EMAIL] Создан лид ' + leadNumber + ' из письма от ' + fromEmail);
 

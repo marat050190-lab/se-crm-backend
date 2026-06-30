@@ -1,6 +1,7 @@
 const express = require('express');
 const pool = require('../db/pool');
 const { authMiddleware } = require('../middleware/auth');
+const { sendEmail } = require('../services/smtp');
 
 const router = express.Router();
 router.use(authMiddleware);
@@ -305,6 +306,39 @@ router.post('/:id/comment', async (req, res) => {
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: 'Ошибка сохранения' });
+  }
+});
+
+// GET /api/leads/:id/emails
+router.get('/:id/emails', async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      'SELECT * FROM lead_emails WHERE lead_id = $1 ORDER BY sent_at ASC',
+      [req.params.id]
+    );
+    res.json(rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/leads/:id/send-email
+router.post('/:id/send-email', async (req, res) => {
+  const { to, subject, text } = req.body;
+  if (!to || !subject || !text) return res.status(400).json({ error: 'Заполните все поля' });
+  try {
+    await sendEmail({ to, subject, text, html: text.replace(/\n/g, '<br>') });
+
+    await pool.query(
+      `INSERT INTO lead_emails (lead_id, message_id, direction, from_email, from_name, to_email, subject, body_text)
+       VALUES ($1, $2, 'out', 'info@standart-express.ru', 'Стандарт Экспресс', $3, $4, $5)`,
+      [req.params.id, 'out_' + Date.now(), to, subject, text]
+    );
+
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('[SMTP] Ошибка:', err);
+    res.status(500).json({ error: 'Ошибка отправки: ' + err.message });
   }
 });
 
