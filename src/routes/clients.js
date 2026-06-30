@@ -45,6 +45,31 @@ router.get('/', authMiddleware, async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// Автодополнение клиентов по имени (для фильтров)
+router.get('/suggest', authMiddleware, async (req, res) => {
+  try {
+    const { role, id } = req.user;
+    const q = req.query.q || '';
+    if (q.length < 2) return res.json([]);
+
+    const seeAll = ['super_admin', 'admin', 'cs_head', 'rop'].includes(role);
+    let where, params;
+    if (seeAll) {
+      where = `WHERE c.name ILIKE $1`;
+      params = [`%${q}%`];
+    } else {
+      where = `WHERE c.manager_id=$1 AND c.name ILIKE $2`;
+      params = [id, `%${q}%`];
+    }
+
+    const { rows } = await pool.query(
+      `SELECT DISTINCT c.name, c.inn FROM clients c ${where} ORDER BY c.name LIMIT 10`,
+      params
+    );
+    res.json(rows);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // Один клиент + его заказы
 router.get('/:id', authMiddleware, async (req, res) => {
   try {
