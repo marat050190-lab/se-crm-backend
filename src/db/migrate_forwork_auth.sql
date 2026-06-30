@@ -13,3 +13,5 @@ CREATE TABLE IF NOT EXISTS forwork_auth_sessions (
 
 CREATE INDEX IF NOT EXISTS idx_forwork_auth_sessions_payload ON forwork_auth_sessions(start_payload);
 CREATE INDEX IF NOT EXISTS idx_forwork_auth_sessions_status ON forwork_auth_sessions(status);
+
+ALTER TABLE contractors ADD COLUMN IF NOT EXISTS avatar_url TEXT;
