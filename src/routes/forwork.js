@@ -354,6 +354,39 @@ router.patch('/profile/self-employed', async (req, res) => {
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
+// POST /api/forwork/auth/login-by-phone — повторный вход по телефону
+router.post('/auth/login-by-phone', async (req, res) => {
+  let { phone } = req.body;
+  if (!phone) return res.status(400).json({ error: 'Укажите номер телефона' });
+  const cleanPhone = phone.replace(/\D/g, '');
+
+  try {
+    const { rows } = await pool.query('SELECT * FROM contractors WHERE phone = $1', [cleanPhone]);
+    if (!rows.length || !rows[0].telegram_id) {
+      return res.status(404).json({ error: 'Исполнитель с таким номером не найден. Зарегистрируйтесь через Telegram.' });
+    }
+
+    const contractor = rows[0];
+    const code = Math.floor(100000 + Math.random() * 900000).toString();
+    const expiresAt = new Date(Date.now() + 5 * 60 * 1000);
+    const payload = crypto.randomBytes(32).toString('hex');
+
+    await pool.query(
+      `INSERT INTO forwork_auth_sessions (start_payload, telegram_user_id, code_hash, status, expires_at, last_resend_at)
+       VALUES ($1, $2, $3, 'code_sent', $4, $5)`,
+      [payload, contractor.telegram_id, hashCode(code), expiresAt, new Date()]
+    );
+
+    await sendTelegram(contractor.telegram_id,
+      `🔐 Код для входа в ForWork:\n\n<b>${code}</b>\n\nКод действителен 5 минут.`
+    );
+
+    res.json({ ok: true, sessionId: payload });
+  } catch(e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // Старые роуты — оставляем для совместимости
 router.post('/send-code', async (req, res) => {
   res.status(410).json({ error: 'Этот метод устарел. Используйте /auth/start' });
