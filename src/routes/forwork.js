@@ -101,7 +101,7 @@ router.post('/auth/verify', async (req, res) => {
       contractor = existing.rows[0];
     } else {
       const created = await pool.query(
-        `INSERT INTO contractors (telegram_id, status) VALUES ($1, 'new') RETURNING *`,
+        `INSERT INTO contractors (telegram_id, status, name) VALUES ($1, 'new', 'Новый исполнитель') RETURNING *`,
         [tgId.toString()]
       );
       contractor = created.rows[0];
