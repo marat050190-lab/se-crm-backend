@@ -109,4 +109,63 @@ router.get('/dispatcher', authMiddleware, async (req, res) => {
   }
 });
 
+// GET /api/stats/sales-departments — статистика ОП в разрезе подразделений и сотрудников
+router.get('/sales-departments', async (req, res) => {
+  try {
+    const dateFrom = req.query.date_from || new Date(Date.now() - 30*24*60*60*1000).toISOString().slice(0,10);
+    const dateTo = req.query.date_to || new Date().toISOString().slice(0,10);
+
+    const byEmployee = await pool.query(`
+      SELECT u.id, u.name, u.role,
+        COUNT(l.id) FILTER (WHERE l.created_at >= $1 AND l.created_at < ($2::date + INTERVAL '1 day')) as leads_total,
+        COUNT(l.id) FILTER (WHERE l.status = 'new' AND l.created_at >= $1 AND l.created_at < ($2::date + INTERVAL '1 day')) as leads_new,
+        COUNT(l.id) FILTER (WHERE l.status = 'in_progress' AND l.created_at >= $1 AND l.created_at < ($2::date + INTERVAL '1 day')) as leads_in_progress,
+        COUNT(l.id) FILTER (WHERE l.status IN ('transferred_mfl','transferred_b2b','taken','b2b_approved') AND l.created_at >= $1 AND l.created_at < ($2::date + INTERVAL '1 day')) as leads_won
+      FROM users u
+      LEFT JOIN leads l ON l.assigned_to = u.id
+      WHERE u.role IN ('dispatcher','b2b_manager','mfl_manager') AND u.is_active = true
+      GROUP BY u.id, u.name, u.role
+      ORDER BY u.role, u.name
+    `, [dateFrom, dateTo]);
+
+    const openTasks = await pool.query(`
+      SELECT t.assigned_to as user_id, COUNT(*) as count
+      FROM tasks t
+      WHERE t.status = 'pending'
+      GROUP BY t.assigned_to
+    `);
+    const tasksMap = {};
+    openTasks.rows.forEach(r => { tasksMap[r.user_id] = parseInt(r.count); });
+
+    const employees = byEmployee.rows.map(r => ({
+      id: r.id,
+      name: r.name,
+      role: r.role,
+      leads_total: parseInt(r.leads_total),
+      leads_new: parseInt(r.leads_new),
+      leads_in_progress: parseInt(r.leads_in_progress),
+      leads_won: parseInt(r.leads_won),
+      tasks_open: tasksMap[r.id] || 0,
+    }));
+
+    const departments = {};
+    ['dispatcher', 'b2b_manager', 'mfl_manager'].forEach(role => {
+      const list = employees.filter(e => e.role === role);
+      departments[role] = {
+        leads_total: list.reduce((s, e) => s + e.leads_total, 0),
+        leads_new: list.reduce((s, e) => s + e.leads_new, 0),
+        leads_in_progress: list.reduce((s, e) => s + e.leads_in_progress, 0),
+        leads_won: list.reduce((s, e) => s + e.leads_won, 0),
+        tasks_open: list.reduce((s, e) => s + e.tasks_open, 0),
+        employees: list,
+      };
+    });
+
+    res.json({ date_from: dateFrom, date_to: dateTo, departments });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Ошибка статистики по подразделениям ОП' });
+  }
+});
+
 module.exports = router;
