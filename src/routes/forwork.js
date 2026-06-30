@@ -341,6 +341,19 @@ router.delete('/debug-contractors/:id', async (req, res) => {
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
+// PATCH /api/forwork/profile/self-employed — переключить статус самозанятости
+router.patch('/profile/self-employed', async (req, res) => {
+  const { contractor_id, is_self_employed } = req.body;
+  if (!contractor_id) return res.status(400).json({ error: 'Нет ID исполнителя' });
+  try {
+    const { rows } = await pool.query(
+      'UPDATE contractors SET is_self_employed=$1 WHERE id=$2 RETURNING *',
+      [is_self_employed, contractor_id]
+    );
+    res.json({ ok: true, contractor: rows[0] });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
 // Старые роуты — оставляем для совместимости
 router.post('/send-code', async (req, res) => {
   res.status(410).json({ error: 'Этот метод устарел. Используйте /auth/start' });
