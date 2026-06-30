@@ -312,35 +312,6 @@ router.post('/orders/:id/complete', async (req, res) => {
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
-// GET /api/forwork/me — проверка токена
-router.get('/me', async (req, res) => {
-  const authHeader = req.headers.authorization;
-  if (!authHeader) return res.status(401).json({ error: 'Нет токена' });
-  try {
-    const jwt = require('jsonwebtoken');
-    const decoded = jwt.verify(authHeader.replace('Bearer ', ''), process.env.JWT_SECRET || 'forwork_secret');
-    res.json({ ok: true, decoded });
-  } catch(e) {
-    res.status(400).json({ error: e.message, token: authHeader.slice(0,30) });
-  }
-});
-
-// GET /api/forwork/debug-contractors — временный дебаг
-router.get('/debug-contractors', async (req, res) => {
-  try {
-    const { rows } = await pool.query('SELECT id, telegram_id, first_name, last_name, city, phone, status, created_at FROM contractors ORDER BY id DESC LIMIT 10');
-    res.json(rows);
-  } catch(e) { res.status(500).json({ error: e.message }); }
-});
-
-// DELETE /api/forwork/debug-contractors/:id — временный дебаг
-router.delete('/debug-contractors/:id', async (req, res) => {
-  try {
-    await pool.query('DELETE FROM contractors WHERE id=$1', [req.params.id]);
-    res.json({ ok: true });
-  } catch(e) { res.status(500).json({ error: e.message }); }
-});
-
 // PATCH /api/forwork/profile/self-employed — переключить статус самозанятости
 router.patch('/profile/self-employed', async (req, res) => {
   const { contractor_id, is_self_employed } = req.body;
@@ -385,15 +356,6 @@ router.post('/auth/login-by-phone', async (req, res) => {
   } catch(e) {
     res.status(500).json({ error: e.message });
   }
-});
-
-// PATCH /api/forwork/debug-contractors/:id/phone — временный дебаг
-router.patch('/debug-contractors/:id/phone', async (req, res) => {
-  try {
-    const { phone } = req.body;
-    await pool.query('UPDATE contractors SET phone=$1 WHERE id=$2', [phone, req.params.id]);
-    res.json({ ok: true });
-  } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
 // Старые роуты — оставляем для совместимости
