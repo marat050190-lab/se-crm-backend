@@ -325,6 +325,14 @@ router.get('/me', async (req, res) => {
   }
 });
 
+// GET /api/forwork/debug-contractors — временный дебаг
+router.get('/debug-contractors', async (req, res) => {
+  try {
+    const { rows } = await pool.query('SELECT id, telegram_id, first_name, last_name, city, status, created_at FROM contractors ORDER BY id DESC LIMIT 10');
+    res.json(rows);
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
 // Старые роуты — оставляем для совместимости
 router.post('/send-code', async (req, res) => {
   res.status(410).json({ error: 'Этот метод устарел. Используйте /auth/start' });
