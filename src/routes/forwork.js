@@ -328,7 +328,7 @@ router.get('/me', async (req, res) => {
 // GET /api/forwork/debug-contractors — временный дебаг
 router.get('/debug-contractors', async (req, res) => {
   try {
-    const { rows } = await pool.query('SELECT id, telegram_id, first_name, last_name, city, status, created_at FROM contractors ORDER BY id DESC LIMIT 10');
+    const { rows } = await pool.query('SELECT id, telegram_id, first_name, last_name, city, phone, status, created_at FROM contractors ORDER BY id DESC LIMIT 10');
     res.json(rows);
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
