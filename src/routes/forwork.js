@@ -387,6 +387,15 @@ router.post('/auth/login-by-phone', async (req, res) => {
   }
 });
 
+// PATCH /api/forwork/debug-contractors/:id/phone — временный дебаг
+router.patch('/debug-contractors/:id/phone', async (req, res) => {
+  try {
+    const { phone } = req.body;
+    await pool.query('UPDATE contractors SET phone=$1 WHERE id=$2', [phone, req.params.id]);
+    res.json({ ok: true });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
 // Старые роуты — оставляем для совместимости
 router.post('/send-code', async (req, res) => {
   res.status(410).json({ error: 'Этот метод устарел. Используйте /auth/start' });
