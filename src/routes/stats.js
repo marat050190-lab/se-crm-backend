@@ -168,4 +168,112 @@ router.get('/sales-departments', async (req, res) => {
   }
 });
 
+// GET /api/stats/cs и /api/stats/mfl — статистика КС/МФЛ по заказам (orders)
+function deptOrdersHandler(role) {
+  return async (req, res) => {
+    try {
+      const { date_from, date_to, legal_entity, client_name, status } = req.query;
+
+      const conditions = [`u.role = $1`];
+      const params = [role];
+      let i = 2;
+
+      if (date_from) { conditions.push(`o.created_at >= $${i++}`); params.push(date_from); }
+      if (date_to) { conditions.push(`o.created_at < ($${i++}::date + INTERVAL '1 day')`); params.push(date_to); }
+      if (legal_entity) { conditions.push(`o.legal_entity = $${i++}`); params.push(legal_entity); }
+      if (client_name) { conditions.push(`c.name ILIKE $${i++}`); params.push(`%${client_name}%`); }
+      if (status) {
+        const statuses = Array.isArray(status) ? status : [status];
+        conditions.push(`o.status = ANY($${i++})`);
+        params.push(statuses);
+      }
+
+      const where = conditions.join(' AND ');
+
+      const metricsQ = await pool.query(`
+        SELECT
+          COALESCE(SUM(o.revenue), 0) as revenue,
+          COALESCE(SUM(o.net_profit), 0) as net_profit,
+          COALESCE(SUM(o.executor_cost), 0) as executor_cost,
+          COUNT(*) as orders_count,
+          COALESCE(AVG(o.revenue), 0) as avg_check
+        FROM orders o
+        JOIN users u ON u.id = o.manager_id
+        LEFT JOIN clients c ON c.id = o.client_id
+        WHERE ${where}
+      `, params);
+
+      const dailyQ = await pool.query(`
+        SELECT DATE(o.created_at) as day,
+          COALESCE(SUM(o.revenue), 0) as revenue,
+          COALESCE(SUM(o.net_profit), 0) as net_profit
+        FROM orders o
+        JOIN users u ON u.id = o.manager_id
+        LEFT JOIN clients c ON c.id = o.client_id
+        WHERE ${where}
+        GROUP BY DATE(o.created_at)
+        ORDER BY day
+      `, params);
+
+      const managersQ = await pool.query(`
+        SELECT u.id, u.name,
+          COALESCE(SUM(o.revenue), 0) as revenue,
+          COALESCE(SUM(o.revenue) FILTER (WHERE o.invoice_paid = false), 0) as revenue_no_invoice,
+          COALESCE(SUM(o.executor_cost), 0) as executor_cost,
+          COUNT(DISTINCT o.id) as orders_count,
+          COALESCE(SUM(o.net_profit), 0) as net_profit,
+          COALESCE(AVG(o.revenue), 0) as avg_check
+        FROM orders o
+        JOIN users u ON u.id = o.manager_id
+        LEFT JOIN clients c ON c.id = o.client_id
+        WHERE ${where}
+        GROUP BY u.id, u.name
+        ORDER BY revenue DESC
+      `, params);
+
+      const m = metricsQ.rows[0];
+      const revenue = Number(m.revenue);
+      const netProfit = Number(m.net_profit);
+
+      res.json({
+        metrics: {
+          revenue,
+          net_profit: netProfit,
+          executor_cost: Number(m.executor_cost),
+          orders_count: parseInt(m.orders_count),
+          avg_check: Math.round(Number(m.avg_check)),
+          profit_pct: revenue ? Math.round((netProfit / revenue) * 100) : 0,
+        },
+        daily: dailyQ.rows.map(r => ({
+          day: r.day,
+          revenue: Number(r.revenue),
+          net_profit: Number(r.net_profit),
+        })),
+        managers: managersQ.rows.map(r => {
+          const rev = Number(r.revenue);
+          const np = Number(r.net_profit);
+          return {
+            id: r.id,
+            name: r.name,
+            revenue: rev,
+            revenue_no_invoice: Number(r.revenue_no_invoice),
+            executor_cost: Number(r.executor_cost),
+            people: 0,
+            net_profit: np,
+            profit_pct: rev ? Math.round((np / rev) * 100) : 0,
+            orders_count: parseInt(r.orders_count),
+            avg_check: Math.round(Number(r.avg_check)),
+          };
+        }),
+      });
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: 'Ошибка статистики подразделения' });
+    }
+  };
+}
+
+router.get('/cs', deptOrdersHandler('cs_manager'));
+router.get('/mfl', deptOrdersHandler('mfl_manager'));
+
 module.exports = router;
