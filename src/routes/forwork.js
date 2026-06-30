@@ -333,6 +333,14 @@ router.get('/debug-contractors', async (req, res) => {
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
+// DELETE /api/forwork/debug-contractors/:id — временный дебаг
+router.delete('/debug-contractors/:id', async (req, res) => {
+  try {
+    await pool.query('DELETE FROM contractors WHERE id=$1', [req.params.id]);
+    res.json({ ok: true });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
 // Старые роуты — оставляем для совместимости
 router.post('/send-code', async (req, res) => {
   res.status(410).json({ error: 'Этот метод устарел. Используйте /auth/start' });
