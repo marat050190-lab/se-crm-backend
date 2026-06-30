@@ -304,7 +304,7 @@ router.post('/orders/:id/complete', async (req, res) => {
     const decoded = jwt.verify(authHeader.replace('Bearer ', ''), process.env.JWT_SECRET || 'forwork_secret');
 
     const { rows } = await pool.query(
-      `UPDATE orders SET status='done' WHERE id=$1 AND contractor_id=$2 RETURNING *`,
+      `UPDATE orders SET status='pay_executor' WHERE id=$1 AND contractor_id=$2 RETURNING *`,
       [req.params.id, decoded.id]
     );
     if (!rows.length) return res.status(400).json({ error: 'Заказ не найден' });
