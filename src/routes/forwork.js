@@ -226,6 +226,7 @@ router.post('/register', async (req, res) => {
     );
 
     const contractor = rows[0];
+    const jwt = require('jsonwebtoken');
     const token = jwt.sign(
       { id: contractor.id, telegram_id: contractor.telegram_id, role: 'contractor' },
       process.env.JWT_SECRET || 'forwork_secret',
