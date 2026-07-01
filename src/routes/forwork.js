@@ -367,4 +367,17 @@ router.post('/verify-code', async (req, res) => {
   res.status(410).json({ error: 'Этот метод устарел. Используйте /auth/verify' });
 });
 
+// DELETE /api/forwork/profile — удаление аккаунта исполнителя (требование Google Play)
+router.delete('/profile', async (req, res) => {
+  try {
+    const { contractor_id } = req.body;
+    if (!contractor_id) return res.status(400).json({ error: 'contractor_id обязателен' });
+    await pool.query('DELETE FROM contractors WHERE id = $1', [contractor_id]);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;
